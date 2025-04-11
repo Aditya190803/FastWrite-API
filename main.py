@@ -15,6 +15,11 @@ from FastWrite import (
 # FastAPI app setup
 app = FastAPI()
 
+# Root endpoint
+@app.get("/")
+async def root():
+    return {"message": "Welcome to FastAPI!"}
+
 # Pydantic model for the request body
 class RequestBody(BaseModel):
     github_url: str = None
@@ -115,4 +120,3 @@ async def generate_documentation(request: RequestBody):
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'Internal server error: {str(e)}')
-
