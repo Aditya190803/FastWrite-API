@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
-# ADDED: Import CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import base64
@@ -32,7 +31,6 @@ app.add_middleware(
     allow_methods=["*"],    # Allows all methods (GET, POST, OPTIONS, etc.) or specify ["GET", "POST", "OPTIONS"]
     allow_headers=["*"],    # Allows all headers or specify ["Content-Type", "Authorization"] etc.
 )
-
 
 # Root endpoint
 @app.get("/")
@@ -78,10 +76,7 @@ def process_zip(zip_data, tmp_dir):
     py_files = list_python_files(tmp_dir)
     if not py_files:
         raise ValueError("No Python files found in the ZIP")
-    # CHANGED: Ensure main_file_path logic handles potential subdirectories correctly
-    # This assumes the first python file found might be nested. A better approach
-    # might be needed depending on expected ZIP structure.
-    main_file_path = py_files[0] # list_python_files should return full paths
+    main_file_path = os.path.join(tmp_dir, py_files[0])
     return read_file(main_file_path)
 
 @app.post("/generate")
@@ -102,23 +97,14 @@ async def generate_documentation(request: RequestBody):
         if llm_provider in {"groq", "gemini", "openai", "openrouter"} and not api_key:
             raise HTTPException(status_code=400, detail=f'API key is required for {llm_provider}')
 
-        # Using /tmp might have permission issues on some platforms like Render's free tier
-        # Consider using a relative path or ensuring /tmp is writable
-        with tempfile.TemporaryDirectory(dir='./tmp_processing') as tmp_dir:
-            # Ensure the directory exists
-            os.makedirs(tmp_dir, exist_ok=True)
-
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp_dir:
             if request.github_url:
                 zip_data = fetch_github_zip(request.github_url)
             elif request.zip_file:
                 try:
-                    # Handle potential padding errors in base64
-                    missing_padding = len(request.zip_file) % 4
-                    if missing_padding:
-                        request.zip_file += '=' * (4 - missing_padding)
-                    zip_data = base64.b64decode(request.zip_file, validate=True)
-                except Exception as e:
-                    raise HTTPException(status_code=400, detail=f'Invalid base64-encoded ZIP file: {str(e)}')
+                    zip_data = base64.b64decode(request.zip_file)
+                except Exception:
+                    raise HTTPException(status_code=400, detail='Invalid base64-encoded ZIP file')
 
             code_content = process_zip(zip_data, tmp_dir)
 
@@ -149,11 +135,5 @@ async def generate_documentation(request: RequestBody):
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
-    except HTTPException as e: # Re-raise HTTPExceptions
-        raise e
     except Exception as e:
-        # Log the full error for debugging on the server
-        print(f"Unhandled Internal server error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f'Internal server error')
+        raise HTTPException(status_code=500, detail=f'Internal server error: {str(e)}')
