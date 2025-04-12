@@ -106,7 +106,7 @@ async def generate_documentation(request: RequestBody):
 
             if llm_provider == "groq":
                 documentation = generate_documentation_groq(code_content, custom_prompt, api_key, request.llm_model)
-            elif llm_provider == "gemini":
+            elif llm_provider == "google":
                 documentation = generate_documentation_gemini(code_content, custom_prompt, api_key, request.llm_model)
             elif llm_provider == "openai":
                 documentation = generate_documentation_openai(code_content, custom_prompt, api_key, request.llm_model)
