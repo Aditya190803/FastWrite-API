@@ -1,13 +1,12 @@
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-import json
 import base64
 import os
 import tempfile
 import requests
 from FastWrite import (
-    extract_zip, list_python_files, read_file,
+    extract_zip, list_code_files, read_file,  # UPDATED
     generate_documentation_groq, generate_documentation_gemini,
     generate_documentation_openai, generate_documentation_openrouter,
     generate_data_flow
@@ -16,28 +15,20 @@ from FastWrite import (
 # FastAPI app setup
 app = FastAPI()
 
-# ADDED: Define allowed origins (your frontend URL and potentially localhost for development)
-origins = [
-    "https://fastwrite-ui.vercel.app",  # Your deployed frontend
-    "http://localhost:8080",           # Example for local development (adjust port if needed)
-    "http://127.0.0.1:8080",          # Another common local development address
-]
-
-# ADDED: Add CORSMiddleware to the application
+# ✅ CORS: Allow requests from any origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # List of origins allowed
-    allow_credentials=True, # Allows cookies to be included (if needed)
-    allow_methods=["*"],    # Allows all methods (GET, POST, OPTIONS, etc.) or specify ["GET", "POST", "OPTIONS"]
-    allow_headers=["*"],    # Allows all headers or specify ["Content-Type", "Authorization"] etc.
+    allow_origins=["*"],           # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Root endpoint
 @app.get("/")
 async def root():
     return {"message": "Welcome to FastAPI!"}
 
-# Pydantic model for the request body
+# Request body schema
 class RequestBody(BaseModel):
     github_url: str = None
     zip_file: str = None
@@ -73,10 +64,10 @@ def process_zip(zip_data, tmp_dir):
     with open(zip_path, "wb") as f:
         f.write(zip_data)
     extract_zip(zip_path, tmp_dir)
-    py_files = list_python_files(tmp_dir)
-    if not py_files:
-        raise ValueError("No Python files found in the ZIP")
-    main_file_path = os.path.join(tmp_dir, py_files[0])
+    code_files = list_code_files(tmp_dir)  # ✅ Support all code files
+    if not code_files:
+        raise ValueError("No code files found in the ZIP")
+    main_file_path = os.path.join(tmp_dir, code_files[0])
     return read_file(main_file_path)
 
 @app.post("/generate")
