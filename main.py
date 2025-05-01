@@ -6,7 +6,7 @@ import os
 import tempfile
 import requests
 from FastWrite import (
-    extract_zip, list_code_files, read_file,  # UPDATED
+    extract_zip, list_code_files, read_file,
     generate_documentation_groq, generate_documentation_gemini,
     generate_documentation_openai, generate_documentation_openrouter,
     generate_data_flow
@@ -18,7 +18,7 @@ app = FastAPI()
 # ✅ CORS: Allow requests from any origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],           # Allow all origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,7 +28,7 @@ app.add_middleware(
 async def root():
     return {"message": "Welcome to FastAPI!"}
 
-# Request body schema
+# Request body schema for /generate
 class RequestBody(BaseModel):
     github_url: str = None
     zip_file: str = None
@@ -36,6 +36,13 @@ class RequestBody(BaseModel):
     llm_model: str
     api_key: str = None
     prompt: str
+
+# Request body schema for /fix
+class FixRequest(BaseModel):
+    mermaid_code: str
+    llm_provider: str
+    llm_model: str
+    api_key: str
 
 def fetch_github_zip(github_url: str):
     if not github_url.startswith("https://github.com/"):
@@ -64,7 +71,7 @@ def process_zip(zip_data, tmp_dir):
     with open(zip_path, "wb") as f:
         f.write(zip_data)
     extract_zip(zip_path, tmp_dir)
-    code_files = list_code_files(tmp_dir)  # ✅ Support all code files
+    code_files = list_code_files(tmp_dir)
     if not code_files:
         raise ValueError("No code files found in the ZIP")
     main_file_path = os.path.join(tmp_dir, code_files[0])
@@ -128,3 +135,35 @@ async def generate_documentation(request: RequestBody):
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'Internal server error: {str(e)}')
+
+@app.post("/fix")
+async def fix_mermaid_code(request: FixRequest):
+    try:
+        llm_provider = request.llm_provider.lower()
+        api_key = request.api_key
+        model = request.llm_model
+        raw_code = request.mermaid_code.strip()
+
+        if not (llm_provider and model and api_key and raw_code):
+            raise HTTPException(status_code=400, detail="Missing required fields")
+
+        fix_prompt = (
+            "Fix this Mermaid.js diagram code and ensure it is valid Mermaid syntax:\n\n"
+            f"{raw_code}"
+        )
+
+        if llm_provider == "groq":
+            fixed_code = generate_documentation_groq(raw_code, fix_prompt, api_key, model)
+        elif llm_provider == "google":
+            fixed_code = generate_documentation_gemini(raw_code, fix_prompt, api_key, model)
+        elif llm_provider == "openai":
+            fixed_code = generate_documentation_openai(raw_code, fix_prompt, api_key, model)
+        elif llm_provider == "openrouter":
+            fixed_code = generate_documentation_openrouter(raw_code, fix_prompt, api_key, model)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported LLM provider: {llm_provider}")
+
+        return {"fixed_mermaid_code": fixed_code.strip()}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
